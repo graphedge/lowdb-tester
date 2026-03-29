@@ -1,0 +1,252 @@
+#!/bin/bash
+# bin/specfarm-plugin-validate — Plugin manifest validator (pure bash, zero external deps)
+# Task T0446: Validates a plugin manifest against manifest-schema.json and sandbox constraints
+#
+# Usage: bash bin/specfarm-plugin-validate <path/to/plugin.json>
+# Exit 0 → PASS; Exit 1 → FAIL (errors printed to stderr)
+# Constitutional compliance: Shell-first, minimal dependencies (per Constitution Section VIII)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCHEMA="$BASE_DIR/src/plugins/manifest-schema.json"
+
+MANIFEST_PATH="${1:-}"
+
+if [[ -z "$MANIFEST_PATH" ]]; then
+    echo "Usage: specfarm-plugin-validate <path/to/plugin.json>" >&2
+    exit 1
+fi
+
+if [[ ! -f "$MANIFEST_PATH" ]]; then
+    echo "ERROR: manifest not found: $MANIFEST_PATH" >&2
+    exit 1
+fi
+
+if [[ ! -f "$SCHEMA" ]]; then
+    echo "ERROR: schema not found: $SCHEMA" >&2
+    exit 1
+fi
+
+# ============================================================================
+# JSON Parsing Strategy: Prefer jq, fallback to grep-based for strict compliance
+# ============================================================================
+
+ERRORS=()
+USE_JQ=false
+
+if command -v jq &> /dev/null; then
+    USE_JQ=true
+fi
+
+if [[ "$USE_JQ" == true ]]; then
+    # ---- jq-based validation (if jq available) ----
+    jq_validate() {
+        local manifest="$1"
+        local errors=()
+        
+        # Extract fields
+        local id=$(jq -r '.id // ""' "$manifest")
+        local name=$(jq -r '.name // ""' "$manifest")
+        local version=$(jq -r '.version // ""' "$manifest")
+        local entrypoint=$(jq -r '.entrypoint // ""' "$manifest")
+        
+        # Check required fields
+        [[ -z "$id" ]] && errors+=("MISSING: required field 'id'")
+        [[ -z "$name" ]] && errors+=("MISSING: required field 'name'")
+        [[ -z "$version" ]] && errors+=("MISSING: required field 'version'")
+        [[ -z "$entrypoint" ]] && errors+=("MISSING: required field 'entrypoint'")
+        
+        if (( ${#errors[@]} > 0 )); then
+            printf '%s\n' "${errors[@]}"
+            return 1
+        fi
+        
+        # Validate id format
+        if ! [[ "$id" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
+            errors+=("INVALID: 'id' must match ^[a-z0-9][a-z0-9-]*[a-z0-9]$ (got '$id')")
+        fi
+        
+        # Validate version semver
+        if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            errors+=("INVALID: 'version' must be semver major.minor.patch (got '$version')")
+        fi
+        
+        # Validate entrypoint exists
+        local plugin_dir=$(dirname "$manifest")
+        local ep_path="$plugin_dir/$entrypoint"
+        if [[ ! -e "$ep_path" ]]; then
+            errors+=("MISSING: entrypoint '$entrypoint' not found in plugin directory")
+        fi
+        
+        # Validate permissions structure
+        if ! jq -e '.permissions' "$manifest" > /dev/null 2>&1; then
+            errors+=("MISSING: permissions object")
+        else
+            # Check that required permission keys exist (use has() to avoid falsiness issues)
+            if ! jq -e '.permissions | has("filesystem") and has("network") and has("exec")' "$manifest" > /dev/null 2>&1; then
+                for perm in filesystem network exec; do
+                    if ! jq -e ".permissions | has(\"$perm\")" "$manifest" > /dev/null 2>&1; then
+                        errors+=("MISSING: permissions.$perm")
+                    fi
+                done
+            fi
+            
+            # Validate filesystem.read and .write
+            if jq -e '.permissions.filesystem' "$manifest" > /dev/null 2>&1; then
+                for fs_perm in read write; do
+                    if ! jq -e ".permissions.filesystem | has(\"$fs_perm\")" "$manifest" > /dev/null 2>&1; then
+                        errors+=("MISSING: permissions.filesystem.$fs_perm")
+                    fi
+                done
+            fi
+        fi
+        
+        # Validate write paths are sandboxed
+        local write_paths=$(jq -r '.permissions.filesystem.write[]? // empty' "$manifest")
+        while IFS= read -r write_path; do
+            [[ -z "$write_path" ]] && continue
+            
+            # Check if path is in allowed namespace
+            if ! [[ "$write_path" =~ ^\.specfarm/plugins/[a-z0-9][-a-z0-9]*/ ]] && \
+               ! [[ "$write_path" =~ ^tmp/ ]] && \
+               ! [[ "$write_path" =~ ^/tmp/ ]]; then
+                errors+=("SANDBOX_VIOLATION: write path '$write_path' is outside allowed namespace (.specfarm/plugins/$id/ or tmp/)")
+            fi
+            
+            # Check for forbidden prefixes
+            for forbidden in ".git" ".specfarm/justifications" ".env" "secrets"; do
+                if [[ "$write_path" =~ ^$forbidden ]]; then
+                    errors+=("SANDBOX_VIOLATION: write path '$write_path' targets forbidden area '$forbidden'")
+                fi
+            done
+        done <<< "$write_paths"
+        
+        # Validate exec allowlist
+        local exec_list=$(jq -r '.permissions.exec[]? // empty' "$manifest")
+        while IFS= read -r exe; do
+            [[ -z "$exe" ]] && continue
+            for forbidden in curl wget nc ncat ssh scp ftp; do
+                if [[ "$exe" == "$forbidden" ]]; then
+                    errors+=("SANDBOX_VIOLATION: forbidden executable '$exe' in exec allowlist")
+                fi
+            done
+        done <<< "$exec_list"
+        
+        if (( ${#errors[@]} > 0 )); then
+            printf '%s\n' "${errors[@]}"
+            return 1
+        fi
+        
+        return 0
+    }
+    
+    # Run jq_validate and capture output
+    validation_output=$(jq_validate "$MANIFEST_PATH" 2>&1)
+    validation_rc=$?
+    
+    if [[ $validation_rc -eq 0 ]]; then
+        # Validation passed
+        ID=$(jq -r '.id' "$MANIFEST_PATH")
+        VERSION=$(jq -r '.version' "$MANIFEST_PATH")
+        echo "PASS: manifest valid — id=$ID version=$VERSION"
+        exit 0
+    else
+        # Validation failed - print all errors
+        if [[ -n "$validation_output" ]]; then
+            echo "FAIL: validation failed" >&2
+            echo "$validation_output" | while IFS= read -r line; do
+                [[ -n "$line" ]] && echo "  - $line" >&2
+            done
+        fi
+        exit 1
+    fi
+    
+else
+    # ---- Fallback: grep-based minimal validation (no jq, no python) ----
+    # This is a simplified validator that checks presence of required fields
+    # For full validation, jq or another JSON parser is recommended
+    
+    # Check required top-level keys exist
+    for field in id name version entrypoint permissions; do
+        if ! grep -q "\"$field\"" "$MANIFEST_PATH"; then
+            ERRORS+=("MISSING: required field '$field'")
+        fi
+    done
+    
+    if (( ${#ERRORS[@]} > 0 )); then
+        echo "FAIL: ${#ERRORS[@]} validation error(s) in $MANIFEST_PATH" >&2
+        for err in "${ERRORS[@]}"; do
+            echo "  - $err" >&2
+        done
+        exit 1
+    fi
+    
+    # Extract fields using grep
+    ID=$(grep '"id"' "$MANIFEST_PATH" | sed -E 's/.*"id"\s*:\s*"([^"]+)".*/\1/')
+    VERSION=$(grep '"version"' "$MANIFEST_PATH" | sed -E 's/.*"version"\s*:\s*"([^"]+)".*/\1/')
+    ENTRYPOINT=$(grep '"entrypoint"' "$MANIFEST_PATH" | sed -E 's/.*"entrypoint"\s*:\s*"([^"]+)".*/\1/')
+    
+    # Validate id format
+    if ! [[ "$ID" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
+        ERRORS+=("INVALID: 'id' must match ^[a-z0-9][a-z0-9-]*[a-z0-9]$ (got '$ID')")
+    fi
+    
+    # Validate version semver
+    if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        ERRORS+=("INVALID: 'version' must be semver major.minor.patch (got '$VERSION')")
+    fi
+    
+    # Validate entrypoint exists
+    PLUGIN_DIR="$(dirname "$MANIFEST_PATH")"
+    EP_PATH="$PLUGIN_DIR/$ENTRYPOINT"
+    if [[ ! -e "$EP_PATH" ]]; then
+        ERRORS+=("MISSING: entrypoint '$ENTRYPOINT' not found in plugin directory")
+    fi
+    
+    # Extract write paths - handle both single-line and multi-line arrays
+    # Pattern: "write": ["path1", "path2"] or "write": [\n  "path1",\n  "path2"\n]
+    WRITE_PATHS=$(grep -oP '"write"\s*:\s*\[\s*\K[^\]]*' "$MANIFEST_PATH" | tr ',' '\n' | grep -oE '"[^"]+"' | tr -d '"')
+    
+    while IFS= read -r write_path; do
+        [[ -z "$write_path" ]] && continue
+        
+        # Validate sandbox constraints
+        if ! [[ "$write_path" =~ ^\.specfarm/plugins/[a-z0-9][-a-z0-9]*/ ]] && \
+           ! [[ "$write_path" =~ ^tmp/ ]] && \
+           ! [[ "$write_path" =~ ^/tmp/ ]]; then
+            ERRORS+=("SANDBOX_VIOLATION: write path '$write_path' is outside allowed namespace (.specfarm/plugins/$ID/ or tmp/)")
+        fi
+        
+        # Check forbidden prefixes
+        for forbidden in ".git" ".specfarm/justifications" ".env" "secrets"; do
+            if [[ "$write_path" =~ ^$forbidden ]]; then
+                ERRORS+=("SANDBOX_VIOLATION: write path '$write_path' targets forbidden area '$forbidden'")
+            fi
+        done
+    done <<< "$WRITE_PATHS"
+    
+    # Extract exec list - handle both single-line and multi-line arrays
+    EXEC_LIST=$(grep -oP '"exec"\s*:\s*\[\s*\K[^\]]*' "$MANIFEST_PATH" | tr ',' '\n' | grep -oE '"[^"]+"' | tr -d '"')
+    
+    while IFS= read -r exe; do
+        [[ -z "$exe" ]] && continue
+        
+        for forbidden in curl wget nc ncat ssh scp ftp; do
+            if [[ "$exe" == "$forbidden" ]]; then
+                ERRORS+=("SANDBOX_VIOLATION: forbidden executable '$exe' in exec allowlist")
+            fi
+        done
+    done <<< "$EXEC_LIST"
+    
+    if (( ${#ERRORS[@]} > 0 )); then
+        echo "FAIL: ${#ERRORS[@]} validation error(s) in $MANIFEST_PATH" >&2
+        for err in "${ERRORS[@]}"; do
+            echo "  - $err" >&2
+        done
+        exit 1
+    fi
+    
+    echo "PASS: manifest valid — id=$ID version=$VERSION"
+    exit 0
+fi

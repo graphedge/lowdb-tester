@@ -1,0 +1,130 @@
+#!/bin/bash
+# SpecFarm CLI - Phase 2 (Growth)
+set -euo pipefail
+
+# Absolute path to the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+source "$BASE_DIR/src/config_parser.sh"
+source "$BASE_DIR/src/export/exporter.sh"
+
+PHASE_FILE=".specfarm/phase"
+JUSTIFICATIONS_LOG=".specfarm/justifications.log"
+
+# Ensure directories exist
+mkdir -p .specfarm
+
+show_help() {
+  echo "SpecFarm - The Watchdog of Spec-Driven Development"
+  echo "Usage: specfarm [subcommand] [arguments]"
+  echo ""
+  echo "Subcommands:"
+  echo "  drift [folder]  Show current drift score (signature-based)"
+  echo "  justify [id] [reason] Log a justification for drift"
+  echo "  xml export      Generate rules.xml from constitution and tasks"
+  echo "  config [get|set] [key] [value] Manage .specfarm/config"
+  echo "  onboard         Initialize project and show status"
+  echo "  audit           Display and manage justifications"
+  echo "  phase           Show current project phase"
+  echo "  help            Show this help message"
+}
+
+onboard() {
+  echo "--- SpecFarm Onboarding ---"
+  local current_vibe=$(get_config "VIBE")
+  local current_mode=$(get_config "PHASE_MODE")
+  
+  echo "Current Vibe: ${current_vibe:-not set (default: farm)}"
+  echo "Current Phase Mode: ${current_mode:-not set (default: loose)}"
+  
+  echo ""
+  echo "Installing pre-commit hook..."
+  if [[ -d .git/hooks ]]; then
+    cp "$SCRIPT_DIR/specfarm-pre-commit" .git/hooks/pre-commit
+    chmod +x .git/hooks/pre-commit
+    echo "Pre-commit hook installed successfully."
+  else
+    echo "Warning: .git/hooks directory not found. Is this a git repository?"
+  fi
+
+  echo ""
+  echo "Recommended next steps:"
+  echo "1. Run 'specfarm xml export' to sync your rules."
+  echo "2. Run 'specfarm drift' to check your progress."
+  echo ""
+}
+
+# Subcommand routing
+case "${1:-help}" in
+  drift)
+    shift
+    bash "$SCRIPT_DIR/drift-engine" "$@"
+    ;;
+  justify)
+    shift
+    if [ "$#" -lt 2 ]; then
+      echo "Error: justify requires a rule-id and a reason."
+      exit 1
+    fi
+    rule_id="$1"
+    reason="$2"
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    commit_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "no-git")
+    echo "[$timestamp] RULE=\"$rule_id\" JUSTIFICATION=\"$reason\" COMMIT=\"$commit_hash\"" >> "$JUSTIFICATIONS_LOG"
+    echo "Justification recorded."
+    ;;
+  xml)
+    shift
+    if [[ "${1:-}" == "export" ]]; then
+        export_rules
+    else
+        echo "Unknown xml subcommand: ${1:-}"
+        exit 1
+    fi
+    ;;
+  config)
+    shift
+    action="${1:-}"
+    case "$action" in
+        get)
+            get_config "$2"
+            ;;
+        set)
+            set_config "$2" "$3"
+            ;;
+        *)
+            echo "Usage: specfarm config [get|set] [key] [value]"
+            exit 1
+            ;;
+    esac
+    ;;
+  onboard)
+    onboard
+    ;;
+  audit)
+    echo "--- SpecFarm Audit ---"
+    if [ -f "$JUSTIFICATIONS_LOG" ]; then
+        cat "$JUSTIFICATIONS_LOG"
+    else
+        echo "No justifications found."
+    fi
+    ;;
+  phase)
+    shift
+    if [ "$#" -eq 0 ]; then
+       [ -f "$PHASE_FILE" ] && cat "$PHASE_FILE" || echo "Phase 1"
+    else
+       echo "$1" > "$PHASE_FILE"
+       echo "Project phase updated to: $1"
+    fi
+    ;;
+  help|--help|-h)
+    show_help
+    ;;
+  *)
+    echo "Unknown subcommand: $1"
+    show_help
+    exit 1
+    ;;
+esac

@@ -1,0 +1,138 @@
+#!/bin/bash
+# SpecFarm Drift Engine - Phase 3 (OpenSpec Compatibility)
+set -euo pipefail
+
+# Find script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Source drift and nudge logic
+if [[ -f "$BASE_DIR/src/drift/drift_engine.sh" ]]; then
+    source "$BASE_DIR/src/drift/drift_engine.sh"
+else
+    echo "Error: drift_engine.sh not found at $BASE_DIR/src/drift/drift_engine.sh"
+    exit 1
+fi
+
+if [[ -f "$BASE_DIR/src/vibe/nudge_engine.sh" ]]; then
+    source "$BASE_DIR/src/vibe/nudge_engine.sh"
+else
+    echo "Error: nudge_engine.sh not found at $BASE_DIR/src/vibe/nudge_engine.sh"
+    exit 1
+fi
+
+# Source markdown exporter (Phase 3: T007/T021)
+if [[ -f "$BASE_DIR/src/drift/export_markdown.sh" ]]; then
+    source "$BASE_DIR/src/drift/export_markdown.sh"
+fi
+
+# Source shell-error capture (Phase 3: T014)
+if [[ -f "$BASE_DIR/bin/capture-shell-error.sh" ]]; then
+    # shellcheck disable=SC1090
+    source "$BASE_DIR/bin/capture-shell-error.sh"
+fi
+
+# Parse arguments
+FILTER_FOLDER=""
+EXPORT_FORMAT=""
+DRY_RUN=false
+JSON_OUTPUT=false
+SPECSEED_PATH=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --export)
+            EXPORT_FORMAT="${2:-markdown}"
+            shift 2
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        --specseed)
+            SPECSEED_PATH="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: drift-engine [folder] [--export markdown] [--dry-run] [--json] [--specseed <path>]"
+            echo ""
+            echo "Options:"
+            echo "  folder            Scope drift check to a specific folder"
+            echo "  --export FORMAT   Export drift report (supported: markdown)"
+            echo "  --dry-run         Print export to stdout instead of writing a file"
+            echo "  --json            Output drift score as JSON"
+            echo "  --specseed PATH   Run cross-checks on a specseed directory"
+            exit 0
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            FILTER_FOLDER="$1"
+            shift
+            ;;
+    esac
+done
+
+# Handle --specseed flag (T033: US3)
+if [[ -n "$SPECSEED_PATH" ]]; then
+    if [[ -f "$BASE_DIR/src/crosscheck/run_checks.sh" ]]; then
+        echo "=== Running Cross-Check on Specseed ==="
+        "$BASE_DIR/src/crosscheck/run_checks.sh" --specseed "$SPECSEED_PATH"
+        echo ""
+        echo "Note: Drift check skipped when --specseed is provided."
+        exit 0
+    else
+        echo "Error: crosscheck runner not found at $BASE_DIR/src/crosscheck/run_checks.sh" >&2
+        exit 1
+    fi
+fi
+
+# Run drift check
+output=$(run_drift_check "$FILTER_FOLDER" 2>/dev/null) || output=""
+
+# Handle --json flag
+if [[ "$JSON_OUTPUT" == "true" ]]; then
+    adherence_val=$(echo "$output" | grep "TOTAL ADHERENCE:" | grep -o "[0-9]\+" || echo "0")
+    echo "{\"score\": $adherence_val, \"drift\": $((100 - adherence_val))}"
+    exit 0
+fi
+
+echo "$output"
+
+# Handle --export flag (Phase 3: T007/T021/T025)
+if [[ -n "$EXPORT_FORMAT" ]]; then
+    if [[ "$EXPORT_FORMAT" == "markdown" ]]; then
+        if declare -f export_markdown >/dev/null 2>&1; then
+            if [[ "$DRY_RUN" == "true" ]]; then
+                export_markdown "$output" "-"
+            else
+                REPORT_DIR="${DRIFT_REPORT_DIR:-reports}"
+                mkdir -p "$REPORT_DIR"
+                export_markdown "$output" "$REPORT_DIR/drift.md"
+            fi
+        else
+            echo "Error: markdown exporter not available." >&2
+            exit 1
+        fi
+    else
+        echo "Error: unsupported export format: $EXPORT_FORMAT" >&2
+        exit 1
+    fi
+fi
+
+# Extract adherence and dispatch nudge (Phase 3: T015 — quiet/non-blocking)
+adherence=$(echo "$output" | grep "TOTAL ADHERENCE:" | grep -o "[0-9]\+" || echo "0")
+
+NUDGE_QUIET="${NUDGE_QUIET:-false}"
+if [[ "$NUDGE_QUIET" != "true" ]]; then
+    dispatch_nudge "$adherence"
+else
+    # Quiet mode: run nudge but suppress errors (never block)
+    dispatch_nudge "$adherence" 2>/dev/null || true
+fi

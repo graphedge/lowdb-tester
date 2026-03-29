@@ -1,0 +1,100 @@
+commit 1625434256222be0506cdb4fa5e617c538a99066
+Author: graphedge <moranbuying@gmail.com>
+Date:   Mon Mar 16 12:43:24 2026 -0400
+
+    feat: enhance wktree agent with permission confirmation gate
+    
+    Add interactive permission confirmation sequence to wktree.md:
+    - Proof echo: Shows inferred worktree name, path, branch, and focus
+    - Permission request: Explicit yes/no gate with action summary
+    - Response handling: Abort if no, proceed if yes, re-ask if different focus
+    
+    This ensures users must explicitly approve each worktree creation before any commands execute.
+    
+    Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+
+diff --git a/.specfarm-agents/wktree.md b/.specfarm-agents/wktree.md
+index 5b1e347..5615fb4 100644
+--- a/.specfarm-agents/wktree.md
++++ b/.specfarm-agents/wktree.md
+@@ -1,6 +1,41 @@
+-Here’s a reworded / tightened version of the agent prompt. This one assumes the agent (Claude, Copilot CLI, Cursor, etc.) has permission and context to **automatically execute** the git worktree creation and related setup steps — i.e. it “autostarts” the tree by running the commands itself rather than just printing them.
++# Git Worktree Agent (wktree.md)
++
++## ✓ Activation & Permission Confirmation
++
++**REQUIRED BEFORE EXECUTION**: When a trigger phrase is detected, you MUST perform this sequence:
++
++1. **Echo confirmation** (proof of detection):
++   ```
++   ✓ WKTREE AGENT ACTIVATED
++   Focus: [extracted focus description]
++   Inferred worktree name: [kebab-case-name]
++   Path: ../specfarm-[kebab-case-name]
++   Branch: feature/[kebab-case-name] (or pr-[number])
++   ```
++
++2. **Request explicit user permission** (blocking wait):
++   ```
++   Ready to proceed? (yes/no)
++   
++   This will:
++   - Create git worktree at ../specfarm-[kebab-case-name]
++   - Lock files in .specfarm/, rules.xml, relevant src/* modules
++   - Start background watch on error-memory.md
++   - Log all actions to audit trail
++   ```
++
++3. **User response determines behavior**:
++   - `yes` → Proceed immediately to execution steps below
++   - `no` or silent → Abort gracefully with "Worktree creation cancelled."
++   - Different focus provided → Re-infer name and ask again
+ 
+-Use this version when you’re talking to an agent that can actually run shell commands in your session (many CLI-integrated agents now support this mode).
++---
++
++## Implementation: Git Worktree Automation
++
++Here's a reworded / tightened version of the agent prompt. This one assumes the agent (Claude, Copilot CLI, Cursor, etc.) has permission and context to **automatically execute** the git worktree creation and related setup steps — i.e. it "autostarts" the tree by running the commands itself rather than just printing them.
++
++Use this version when you're talking to an agent that can actually run shell commands in your session (many CLI-integrated agents now support this mode).
+ 
+ ```text
+ You are a git + shell agent that can execute commands directly in my terminal session.
+@@ -12,7 +47,9 @@ When I say any of these trigger phrases:
+ "spawn tree for [focus-or-pr-description]"
+ "autostart [focus-or-pr-description]"
+ 
+-Immediately do ALL of these steps IN ORDER, executing each command yourself (do not just print them unless I say "dry-run" or "show commands only").
++FIRST: Perform the Activation & Permission Confirmation sequence above (show proof + request yes/no + wait for response).
++
++THEN: If user says "yes", immediately do ALL of these steps IN ORDER, executing each command yourself (do not just print them unless I say "dry-run" or "show commands only").
+ 
+ **Execution Requirements**: You have full permission to run git and shell commands in this session. Execute, don't simulate.
+ 
+@@ -67,6 +104,7 @@ Immediately do ALL of these steps IN ORDER, executing each command yourself (do
+    If ambiguous → say exactly what's unclear, show diagnostic, and STOP (don't proceed until user clarifies).
+ 
+ Stay silent after setup unless I give a new command or ask a question.
++```
+ 
+ ---
+ 
+@@ -75,7 +113,6 @@ Stay silent after setup unless I give a new command or ask a question.
+ After completing your task, ask the agent:
+ - "finish [inferred-name]" — cleans up worktree, unlocks files, stops watch, logs completion
+ - Or manually: `git worktree remove ../specfarm-[inferred-name]`
+-```
+ 
+ ### Quick copy-paste ready one-liner starters you can say to the agent
+ 
+@@ -84,8 +121,7 @@ After completing your task, ask the agent:
+ - work on T0448 velocity trend forecaster
+ - start work on plugin registry manifest
+ 
+-This version tells the agent to **do the thing** (create tree, cd, lock files, start watch) rather than just propose commands — which matches the “autostart the tree” behavior you’re looking for.
++This version tells the agent to **do the thing** (create tree, cd, lock files, start watch) rather than just propose commands — which matches the "autostart the tree" behavior you're looking for.
+ 
+ If the agent still hesitates / only prints instead of running, add at the top:  
+ `You have full permission to run git and shell commands in this session. Execute, don't simulate.`
+-

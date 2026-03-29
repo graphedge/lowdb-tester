@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# Simple unit tests for agent-command-check.sh
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/src/policy/agent-command-check.sh"
+
+# Create temporary rules file
+tmp=$(mktemp)
+cat > "$tmp" <<'XML'
+ PAGER=cat LESS=-F -X TERM=dumb bash 
+  tests/policy/test_agent_command_check.sh > /tmp/policy_test_output.txt 
+  2>&1; echo EXIT:$?; cat /tmp/policy_test_output.txt<rules> 
+  <agent-commands>
+env PAGER=cat LESS=-F -X TERM=dumb bash scripts/run_policy_tests_local.sh > /tmp/policy_test_output.txt 2>&1; echo EXIT:$?; cat /tmp/policy_test_output.txt
+cd /home/brett/projects/specfarm && bash -c 'source src/policy/agent-command-check.sh; tmp=$(mktemp); cat > "$tmp" <<'\''XML'\''
+<rules>
+  <agent-commands>
+    <allow name="status" always="true" />
+    <allow name="analyze_drift" min-trust="0.65" scopes="project,repo" />
+    <deny name="rm -rf" reason="catastrophic risk" />
+    <rule id="high-risk-write">
+      <when scope="critical/" />
+      <allow name="preview_change" />
+      <deny name="auto_apply" reason="requires human review" />
+    </rule>
+  </agent-commands>
+</rules>
+XML
+export AGENT_COMMANDS_XML="$tmp"
+export _agent_commands_loaded=0
+echo "---TEST 1: status should be allowed---"
+if agent_may_execute status; then echo "✓ PASS"; else echo "✗ FAIL"; exit 1; fi
+echo ""
+echo "---TEST 2: rm -rf should be denied---"
+if agent_may_execute "rm -rf"; then echo "✗ FAIL"; exit 1; else echo "✓ PASS"; fi
+echo ""
+echo "---TEST 3: analyze_drift trust=0.7 should be allowed---"
+if agent_may_execute analyze_drift 0.7 project false 0.0 normal false; then echo "✓ PASS"; else echo "✗ FAIL"; exit 1; fi
+echo ""
+echo "---TEST 4: analyze_drift trust=0.5 should be denied---"
+if agent_may_execute analyze_drift 0.5 project false 0.0 normal false; then echo "✗ FAIL"; exit 1; else echo "✓ PASS"; fi
+echo ""
+rm -f "$tmp"
+echo "=== ALL TESTS PASSED ==="
+'
+pwd && ls -la src/policy/ && head -20 src/policy/agent-command-check.sh
+cd /home/brett/projects/specfarm && git add specs/001-specfarm-phase-1/spec.md specs/002-specfarm-phase-2/plan.md .specfarm/rules.xml.example rules-schema.xsd && git commit -m "PHASE3: Document agent-command-check as Phase 3-only; add rules.xml template and XSD schema updates
+
+- Update Phase 1 spec: Note agent command whitelisting is Phase 3-only
+- Update Phase 2 plan: Add explicit compatibility note that Phase 1/2 remain unchanged; policy is opt-in Phase 3+
+- Create .specfarm/rules.xml.example: Template showing constitutional rules + agent-commands section
+- Update rules-schema.xsd: Add optional <agent-commands> element with allow/deny/rule sub-elements
+
+Maintains backward compatibility: Phase 1/2 code paths do not call agent_may_execute(); allow-all fallback when <agent-commands> absent."
+cd /home/brett/projects/specfarm && git log --oneline -1
+cd /home/brett/projects/specfarm && git status --porcelain; git rev-parse --abbrev-ref HEAD
+cd /home/brett/projects/specfarm && git add -A && git commit -m "PHASE3B: Add Phase3b notes and briefing; add rules example and policy test runner" || true && git rev-parse --abbrev-ref HEAD && git log --oneline -n 3
+cd /home/brett/projects/specfarm && git add specs/003-specfarm-phase-3b/phase3b-updates.md .specfarm/rules.xml.example scripts/run_policy_tests_local.sh || true; git commit -m "PHASE3B: Add Phase3b updates, rules example, and test runner" || true; git status --porcelain; git rev-parse --abbrev-ref HEAD; git log --oneline -n 5
+cd /home/brett/projects/specfarm && git push || true
+cd /home/brett/projects/specfarm && export PAGER=cat && git -c core.pager=cat add -A && git -c core.pager=cat commit -m "PHASE3B: Add Phase3b updates, rules example, and test runner" || true && git -c core.pager=cat status --porcelain && git -c core.pager=cat rev-parse --abbrev-ref HEAD && git -c core.pager=cat log --oneline -n 5 && git -c core.pager=cat push || true
+cd /home/brett/projects/specfarm && unset PAGER && unset GIT_PAGER && export PAGER=cat && git config --local core.pager cat && ls -la specs/003-specfarm-phase-3b/phase3b-updates.md .specfarm/rules.xml.example scripts/run_policy_tests_local.sh 2>&1 | head -20
+bash -c 'cd /home/brett/projects/specfarm && echo "PWD: $PWD" && echo "=== Files ===" && ls -1 specs/003-specfarm-phase-3b/ && echo "=== Git Status ===" && git --no-pager status --short && echo "=== Adding ===" && git add -A && echo "=== Committing ===" && git --no-pager commit -m "PHASE3B: Add Phase3b updates, rules example, and test runner" || echo "Nothing to commit or commit succeeded" && echo "=== Log ===" && git --no-pager log --oneline -n 3 && echo "=== Pushing ===" && git push --quiet 2>&1 && echo "Push succeeded"' 2>&1 | tail -100
+cd /home/brett/projects/specfarm
+bash /home/brett/projects/specfarm/scripts/commit_and_push.sh
+cd /home/brett/projects/specfarm && GIT_PAGER=cat git --no-pager add specs/003-specfarm-phase-3b/phase3b-updates.md .specfarm/rules.xml.example scripts/run_policy_tests_local.sh scripts/commit_and_push.sh 2>&1 | head -5 && echo "Add done" && GIT_PAGER=cat git --no-pager status --porcelain | head -10 && echo "Status done"
+cd /home/brett/projects/specfarm
+chmod +x scripts/commit_and_push.sh
+bash scripts/commit_and_push.shcd /home/brett/projects/specfarm
+git add specs/003-specfarm-phase-3b/phase3b-updates.md \
+        .specfarm/rules.xml.example \
+        scripts/run_policy_tests_local.sh \
+        scripts/commit_and_push.sh
+git commit -m "PHASE3B: Add Phase3b updates, rules example, and test runner"
+git push
+
+
+
+    <allow name="status" always="true" />
+    <allow name="analyze_drift" min-trust="0.65" scopes="project,repo" />
+    <deny name="rm -rf" reason="catastrophic risk" />
+    <rule id="high-risk-write">
+      <when scope="critical/" />
+      <allow name="preview_change" />
+      <deny name="auto_apply" reason="requires human review" />
+    </rule>
+  </agent-commands>
+</rules>
+XML
+
+AGENT_COMMANDS_XML="$tmp" _agent_commands_loaded=0
+
+echo "Test: status should be allowed"
+if agent_may_execute status; then echo PASS; else echo FAIL; exit 1; fi
+
+echo "Test: rm -rf should be denied"
+if agent_may_execute "rm -rf"; then echo FAIL; exit 1; else echo PASS; fi
+
+echo "Test: analyze_drift with trust 0.7 should be allowed"
+if agent_may_execute analyze_drift 0.7 project false 0.0 normal false; then echo PASS; else echo FAIL; exit 1; fi
+
+echo "Test: analyze_drift with trust 0.5 should be denied"
+if agent_may_execute analyze_drift 0.5 project false 0.0 normal false; then echo FAIL; exit 1; else echo PASS; fi
+
+rm -f "$tmp"
+
+echo "All tests passed"

@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+import sys
+import os
+import json
+import datetime
+import platform
+import subprocess
+import argparse
+import re
+
+def scrub(text):
+    if not text:
+        return ""
+    # Basic sanitization: mask common secret patterns
+    text = re.sub(r'(--token|--password|--api-key|--secret|--key)[=\s]+[^\s]+', r'\1=********', text, flags=re.IGNORECASE)
+    text = re.sub(r'(Bearer|Basic)\s+[a-zA-Z0-9\._\-]+', r'\1 ********', text, flags=re.IGNORECASE)
+    return text
+
+def get_shell_info():
+    shell_path = os.environ.get('SHELL', '/bin/sh')
+    try:
+        # Try to get version (most shells support --version)
+        result = subprocess.run([shell_path, '--version'], capture_output=True, text=True, timeout=2)
+        version = result.stdout.strip() or result.stderr.strip()
+    except:
+        version = "unknown"
+    return f"{shell_path} ({version})"
+
+def main():
+    parser = argparse.ArgumentParser(description="Log a shell command failure to SpecFarm.")
+    parser.add_argument("--command", required=True, help="The exact command that failed.")
+    parser.add_argument("--exit-code", type=int, required=True, help="The non-zero exit code.")
+    parser.add_argument("--stdout", default="", help="Captured standard output.")
+    parser.add_argument("--stderr", default="", help="Captured error output.")
+    parser.add_argument("--context", default="", help="Brief description of what was being attempted.")
+    parser.add_argument("--agent-type", default="gemini-cli", help="Agent type (default: gemini-cli).")
+    parser.add_argument("--session-id", default=os.environ.get('GEMINI_SESSION_ID', 'unknown'), help="Unique session ID.")
+
+    args = parser.parse_args()
+
+    log_dir = ".specfarm"
+    log_file = os.path.join(log_dir, "shell-errors.log")
+
+    # Ensure log directory exists
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, mode=0o700, exist_ok=True)
+
+    # Initialize log file with correct permissions if missing
+    if not os.path.exists(log_file):
+        # In some environments, os.open with mode might be restricted.
+        # But we try to follow the rule.
+        try:
+            fd = os.open(log_file, os.O_CREAT | os.O_WRONLY, 0o600)
+            os.close(fd)
+        except:
+            pass
+        with open(log_file, 'w') as f:
+            pass
+
+    entry = {
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "agent_type": args.agent_type,
+        "agent_session_id": args.session_id,
+        "command": scrub(args.command),
+        "exit_code": args.exit_code,
+        "stderr": scrub(args.stderr),
+        "stdout": scrub(args.stdout),
+        "cwd": os.getcwd(),
+        "os_info": f"{platform.system()} {platform.release()} ({platform.machine()})",
+        "shell_info": get_shell_info(),
+        "context": args.context
+    }
+
+    # Atomic append
+    with open(log_file, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+    print(f"Shell error logged to {log_file}")
+
+if __name__ == "__main__":
+    main()

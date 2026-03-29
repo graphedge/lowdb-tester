@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpecFarm Master Rules Template (Phase 2+)
+  
+  This file demonstrates the structure of rules.xml, including:
+  - Constitutional drift rules (Phase 1/2)
+  - Phase constraints and inference (Phase 2)
+  - Agent command whitelisting (Phase 3+, opt-in)
+  - Scoped drift detection (payroll, scheduling, global rules)
+  
+  To use: Copy this file to .specfarm/rules.xml and customize for your project.
+-->
+
+<?xml version="1.0" encoding="UTF-8"?>
+<rules version="1.0">
+  <!-- Phase constraints: Controls how rules are inferred and enforced -->
+  <phase-constraints mode="loose">
+    <!-- 'strict': export fails on conflicts/stale tags; pre-commit blocks on drift
+         'loose': export succeeds, conflicts get low-certainty; warn-only
+         Default = loose (no breaking until Phase 3 CI integration)
+    -->
+  </phase-constraints>
+
+  <!-- PHASE 1-2: Constitutional Drift Rules -->
+
+  <!-- Global rules apply across all scopes -->
+  <rule id="GDPR-01" global="true">
+    <description>Ensure GDPR consent is obtained before processing personal data.</description>
+    <signature type="regex">/consent_obtained|gdpr_check/i</signature>
+    <certainty>1.0</certainty>
+  </rule>
+
+  <!-- Folder-scoped rules apply only to specific business verticals -->
+  <rule id="PY-01" folder="payroll">
+    <description>Payroll calculations MUST be verified by a second agent.</description>
+    <signature type="keyword">payroll_verification</signature>
+    <certainty>0.95</certainty>
+  </rule>
+
+  <rule id="PY-02" folder="payroll">
+    <description>Payroll data must be encrypted at rest.</description>
+    <signature type="regex">/encryption|AES|TLS/</signature>
+    <certainty>0.9</certainty>
+  </rule>
+
+  <!-- Scheduling rules -->
+  <rule id="SCHED-01" folder="scheduling">
+    <description>Scheduling must respect timezone-aware comparisons.</description>
+    <signature type="keyword">utc_time|tz_aware</signature>
+    <certainty>0.85</certainty>
+  </rule>
+
+  <!-- PHASE 3+: Agent Command Whitelisting (Optional, Opt-In) -->
+  <!--
+    This section is opt-in and only enforced when Phase 3+ code paths call agent_may_execute().
+    Phase 1/2 implementations are unaffected.
+    
+    If <agent-commands> is absent or empty, allow-all fallback is triggered (backward compatible).
+  -->
+  <agent-commands>
+    <!-- Allowed commands with always="true" execute without conditions -->
+    <allow name="status" always="true" />
+    <allow name="drift_report" always="true" />
+
+    <!-- Conditional allow: require minimum trust level -->
+    <allow name="analyze_drift" min-trust="0.65" scopes="project,repo" />
+    <allow name="generate_report" min-trust="0.75" />
+
+    <!-- Deny dangerous commands unconditionally -->
+    <deny name="rm -rf" reason="catastrophic risk" />
+    <deny name="format_disk" reason="data destruction" />
+    <deny name="delete_rules" reason="removes safety guardrails" />
+
+    <!-- Scoped rules: Allow/deny based on context (e.g., high-risk folders) -->
+    <rule id="high-risk-write">
+      <when scope="critical/" />
+      <allow name="preview_change" />
+      <deny name="auto_apply" reason="requires human review" />
+    </rule>
+
+    <rule id="payroll-operations">
+      <when scope="payroll/" />
+      <allow name="read_payroll" min-trust="0.8" />
+      <deny name="modify_payroll" reason="manual override required" />
+    </rule>
+  </agent-commands>
+
+</rules>

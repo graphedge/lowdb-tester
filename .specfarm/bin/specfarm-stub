@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# SpecFarm Stub Generator - T030 [US3]
+# Scaffolds specseed templates into specseeds/ directory
+set -euo pipefail
+
+# Find project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+TEMPLATES_DIR="$PROJECT_ROOT/.specfarm/templates"
+OUTPUT_DIR="$PROJECT_ROOT/specseeds"
+
+# Usage function
+usage() {
+    cat <<EOF
+Usage: specfarm-stub new --type <type> [--name <name>]
+
+Create a new specseed from a template.
+
+Options:
+  --type TYPE    Template type (required). Available: payroll, api, service
+  --name NAME    Output directory name (defaults to type)
+  --help, -h     Show this help message
+
+Examples:
+  specfarm-stub new --type payroll
+  specfarm-stub new --type api --name my-api
+
+EOF
+}
+
+# Parse arguments
+COMMAND=""
+TYPE=""
+NAME=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        new)
+            COMMAND="new"
+            shift
+            ;;
+        --type)
+            TYPE="$2"
+            shift 2
+            ;;
+        --name)
+            NAME="$2"
+            shift 2
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Error: Unknown argument '$1'" >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Validate command
+if [[ "$COMMAND" != "new" ]]; then
+    echo "Error: Command 'new' required" >&2
+    usage
+    exit 1
+fi
+
+# Validate type
+if [[ -z "$TYPE" ]]; then
+    echo "Error: --type is required" >&2
+    usage
+    exit 1
+fi
+
+# Check if template exists
+TEMPLATE_PATH="$TEMPLATES_DIR/$TYPE"
+if [[ ! -d "$TEMPLATE_PATH" ]]; then
+    echo "Error: Template type '$TYPE' not found" >&2
+    echo "" >&2
+    echo "Available types:" >&2
+    if [[ -d "$TEMPLATES_DIR" ]]; then
+        for template in "$TEMPLATES_DIR"/*; do
+            if [[ -d "$template" ]]; then
+                basename "$template"
+            fi
+        done | sed 's/^/  - /' >&2
+    else
+        echo "  (no templates available - templates directory not found)" >&2
+    fi
+    exit 1
+fi
+
+# Default name to type if not specified
+if [[ -z "$NAME" ]]; then
+    NAME="$TYPE"
+fi
+
+# Create output directory
+OUTPUT_PATH="$OUTPUT_DIR/$NAME"
+if [[ -e "$OUTPUT_PATH" ]]; then
+    echo "Error: Output directory already exists: $OUTPUT_PATH" >&2
+    exit 1
+fi
+
+mkdir -p "$OUTPUT_PATH"
+
+# Get current date
+CURRENT_DATE=$(date +%Y-%m-%d)
+
+# Process each file in template
+for template_file in "$TEMPLATE_PATH"/*; do
+    if [[ -f "$template_file" ]]; then
+        filename=$(basename "$template_file")
+        output_file="$OUTPUT_PATH/$filename"
+        
+        # Read template and substitute variables
+        sed -e "s/{{NAME}}/$NAME/g" \
+            -e "s/{{TYPE}}/$TYPE/g" \
+            -e "s/{{DATE}}/$CURRENT_DATE/g" \
+            "$template_file" > "$output_file"
+    fi
+done
+
+echo "✓ Created specseed '$NAME' from template '$TYPE'"
+echo "  Location: $OUTPUT_PATH"
+echo ""
+echo "Files created:"
+for file in "$OUTPUT_PATH"/*; do
+    if [[ -f "$file" ]]; then
+        echo "  - $(basename "$file")"
+    fi
+done
+
+exit 0

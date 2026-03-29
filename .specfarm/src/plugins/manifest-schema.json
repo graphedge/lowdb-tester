@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SpecFarm Plugin Manifest",
+  "description": "Manifest format for SpecFarm ecosystem plugins. Defines identity, capabilities, sandbox permissions, and entry points.",
+  "type": "object",
+  "required": ["id", "name", "version", "entrypoint", "permissions"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+      "minLength": 3,
+      "maxLength": 64,
+      "description": "Unique plugin identifier (lowercase, hyphens allowed, no leading/trailing hyphen)"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable plugin name"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version string (major.minor.patch)"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Optional short description of the plugin"
+    },
+    "author": {
+      "type": "string",
+      "maxLength": 256,
+      "description": "Optional author name or organisation"
+    },
+    "entrypoint": {
+      "type": "string",
+      "description": "Relative path to the plugin's main script or executable (must be inside plugin directory)",
+      "pattern": "^[^/][^\\s]*$"
+    },
+    "permissions": {
+      "type": "object",
+      "description": "Sandbox permission declarations. All permissions are deny-by-default.",
+      "additionalProperties": false,
+      "required": ["filesystem", "network", "exec"],
+      "properties": {
+        "filesystem": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["read", "write"],
+          "properties": {
+            "read": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Glob patterns for allowed read paths (relative to repo root)"
+            },
+            "write": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Glob patterns for allowed write paths (relative to repo root). Must be inside .specfarm/plugins/<id>/ or tmp."
+            }
+          }
+        },
+        "network": {
+          "type": "boolean",
+          "description": "Whether the plugin may make outbound network requests. Must be false for most plugins."
+        },
+        "exec": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Allowed executable names the plugin may invoke (e.g. [\"git\", \"jq\"]). Wildcards not permitted."
+        }
+      }
+    },
+    "hooks": {
+      "type": "array",
+      "description": "Optional lifecycle hooks the plugin subscribes to",
+      "items": {
+        "type": "string",
+        "enum": ["pre-drift", "post-drift", "pre-commit", "post-commit", "on-heal", "on-nudge"]
+      }
+    },
+    "specfarm_version": {
+      "type": "string",
+      "pattern": "^>=?[0-9]+\\.[0-9]+",
+      "description": "Minimum compatible SpecFarm version (e.g. >=1.0)"
+    }
+  }
+}

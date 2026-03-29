@@ -1,0 +1,44 @@
+#!/bin/bash
+# SpecFarm Pre-commit Hook
+set -euo pipefail
+
+# Find project root
+BASE_DIR="$(git rev-parse --show-toplevel)"
+cd "$BASE_DIR"
+
+# Source config parser
+source src/config_parser.sh
+
+PHASE_MODE=$(get_config "PHASE_MODE")
+DRIFT_THRESHOLD=$(get_config "DRIFT_THRESHOLD")
+DRIFT_THRESHOLD=${DRIFT_THRESHOLD:-5}
+
+echo "--- SpecFarm Pre-commit Check ---"
+
+# Run drift check and capture adherence
+# We run it globally for pre-commit
+output=$(./bin/specfarm drift)
+echo "$output"
+
+# Extract adherence
+adherence=$(echo "$output" | grep "TOTAL ADHERENCE:" | grep -o "[0-9]\+" || echo "0")
+# Calculate drift count (simplified: 100 - adherence as a proxy for percentage of rules failing)
+# Actually, it's better to count 'DRIFT' status lines
+drift_count=$(echo "$output" | grep -c "DRIFT" || echo "0")
+
+echo "Drift count: $drift_count (Threshold: $DRIFT_THRESHOLD)"
+
+if [[ "$PHASE_MODE" == "strict" ]]; then
+    if [[ "$drift_count" -gt "$DRIFT_THRESHOLD" ]]; then
+        echo -e "\033[0;31mError: Drift count ($drift_count) exceeds threshold ($DRIFT_THRESHOLD) in strict mode.\033[0m"
+        echo "Please justify violations using 'specfarm justify' or fix the drift before committing."
+        exit 1
+    fi
+else
+    if [[ "$drift_count" -gt "$DRIFT_THRESHOLD" ]]; then
+        echo -e "\033[0;33mWarning: Drift count ($drift_count) exceeds threshold ($DRIFT_THRESHOLD).\033[0m"
+        echo "Continuing because PHASE_MODE is not 'strict'."
+    fi
+fi
+
+exit 0

@@ -1,0 +1,27 @@
+You are an expert SpecFarm architect. Update the gather-rules agent (both the .sh core and its documentation/spec) so it becomes the dedicated **granular context provider** for workflow agents.
+
+Key new requirements:
+
+- Add a new mode/flag: `--task-context "exact task description here"` (or `--task "..."`)
+- In this mode the agent does the following in one fast pass:
+  1. Searches rules.xml using XPath/scoped queries for rules that match the task keywords, affected files/directories, test patterns, or anti-patterns.
+  2. Pulls the 3–6 highest-confidence rules that apply (include id, confidence, pattern, evidence, constitution ref, scope).
+  3. Adds any recent relevant commits or test failures touching the same area.
+  4. Generates a compact context blob (target: 120–200 tokens) in clean markdown/XML-hybrid format that can be directly inserted into another agent's system prompt.
+  5. Supports an optional `--size tiny` flag that caps output at ~100 tokens for Haiku-sized agents.
+  6. Still supports all existing modes (PR, scheduled, markdown report, XML fragment output) — do not break them.
+
+- Output format in --task-context mode should be ready-to-paste, e.g.:
+
+```markdown
+### Context for: Fix bash arithmetic guard in test_drift.sh
+
+**Applicable Rules** (highest confidence first):
+- r045 (94%) — Must use `|| true` after arithmetic expressions in tests
+- t112 (87%) — Test harness must validate exit codes match summary
+
+**Recent Evidence**: PR #14 introduced regression; fixed in #15
+**Scope**: tests/integration/
+**Vibe**: Lean Bash — keep portable, no subshells
+
+**Constitution Ref**: Principle III.B — Portability First

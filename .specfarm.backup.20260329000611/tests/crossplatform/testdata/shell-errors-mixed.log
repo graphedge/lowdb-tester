@@ -1,0 +1,5 @@
+{"timestamp":"2026-03-11T10:00:00Z","command":"npm install","exit_code":1,"error_type":"dependency","message":"npm ERR! ERESOLVE unable to resolve dependency tree","context":"ci","sanitized":true}
+{"timestamp":"2026-03-11T10:05:30Z","command":"git push origin main","exit_code":1,"error_type":"auth","message":"remote: Repository not found","context":"local","sanitized":false}
+{"timestamp":"2026-03-11T10:10:15Z","command":"pip install requests","exit_code":0,"error_type":null,"message":"Successfully installed requests-2.31.0","context":"local","sanitized":false}
+{"timestamp":"2026-03-11T10:15:45Z","command":"docker build -t myapp .","exit_code":1,"error_type":"build","message":"ERROR [3/5] RUN npm install: exit code 1","context":"ci","sanitized":true}
+{"timestamp":"2026-03-11T10:20:00Z","command":"bash ./setup.sh","exit_code":127,"error_type":"not_found","message":"bash: jq: command not found","context":"ci","sanitized":false}

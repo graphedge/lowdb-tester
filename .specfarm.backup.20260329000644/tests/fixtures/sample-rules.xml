@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rules xmlns="http://specfarm.example.org/rules">
+  <rule id="r_bash_001" enabled="true" severity="enforce" vibe="farm" phase="2">
+    <name>Bash Arithmetic Guard</name>
+    <description>Ensure bash arithmetic under set -e uses || true or proper guards</description>
+    <scope>global</scope>
+    <condition>Detect dangerous bash arithmetic patterns</condition>
+    <metadata>
+      <source>src/logic/arithmetic.sh</source>
+      <test_link>tests/unit/test_arithmetic_guards.sh</test_link>
+      <note>Constitution II.A violation prevention</note>
+    </metadata>
+  </rule>
+  <rule id="r_path_001" enabled="true" severity="warn" vibe="farm" phase="3b">
+    <name>Cross-Platform Path Normalization</name>
+    <description>Use forward slashes for all paths internally; normalize on entry</description>
+    <scope>repository</scope>
+    <condition>Paths with backslashes in code</condition>
+    <metadata>
+      <source>src/crossplatform/path-normalize.sh</source>
+      <note>Constitution III.C compliance</note>
+    </metadata>
+  </rule>
+  <rule id="r_xml_001" enabled="true" severity="enforce" vibe="farm" phase="2">
+    <name>XML Validation Requirement</name>
+    <description>Always validate rules.xml against rules-schema.xsd before processing</description>
+    <scope>global</scope>
+    <condition>Rules file without schema check</condition>
+    <metadata>
+      <source>bin/xml-helpers.sh</source>
+      <test_link>tests/integration/test_xml_validation.sh</test_link>
+    </metadata>
+  </rule>
+  <rule id="r_git_001" enabled="true" severity="warn" vibe="farm" phase="3b">
+    <name>Commit Message Format</name>
+    <description>Commit messages must include TASK_ID and follow Phase 3b conventions</description>
+    <scope>repository</scope>
+    <condition>Commit messages without TASK_ID</condition>
+    <metadata>
+      <note>Constitution IX (Amendment and Governance)</note>
+    </metadata>
+  </rule>
+  <rule id="r_test_001" enabled="true" severity="enforce" vibe="farm" phase="2">
+    <name>Zero-Dependency Testing</name>
+    <description>Tests must be plain bash with zero external frameworks (no pytest/BATS/Jest)</description>
+    <scope>global</scope>
+    <condition>Presence of prohibited test frameworks</condition>
+    <metadata>
+      <source>tests/test_helper.sh</source>
+      <note>Constitution II.A (CRITICAL)</note>
+    </metadata>
+  </rule>
+  <rule id="r_perf_001" enabled="true" severity="warn" vibe="farm" phase="3b">
+    <name>CLI Performance Baseline</name>
+    <description>CLI commands should respond within 5 seconds for typical operations</description>
+    <scope>global</scope>
+    <condition>Slow CLI commands</condition>
+    <metadata>
+      <note>Constitution VI (Performance)</note>
+    </metadata>
+  </rule>
+  <rule id="r_sec_001" enabled="true" severity="enforce" vibe="farm" phase="2">
+    <name>No Secrets in Logs</name>
+    <description>Never log or print API keys, tokens, or sensitive credentials</description>
+    <scope>global</scope>
+    <condition>Sensitive data in logs</condition>
+    <metadata>
+      <note>Constitution V (Security)</note>
+    </metadata>
+  </rule>
+  <rule id="r_module_001" enabled="true" severity="enforce" vibe="farm" phase="3">
+    <name>Module Integrity: Function Exports</name>
+    <description>Modules must export functions correctly and validate availability on source</description>
+    <scope>repository</scope>
+    <condition>Missing function exports</condition>
+    <metadata>
+      <source>src/config_parser.sh</source>
+      <test_link>tests/e2e/test_function_exports.sh</test_link>
+      <note>Constitution III.A</note>
+    </metadata>
+  </rule>
+  <rule id="r_ps_001" enabled="true" severity="warn" vibe="farm" phase="3b">
+    <name>PowerShell Parity Requirement</name>
+    <description>Native PowerShell implementations must be feature-parity wrappers with parity tests</description>
+    <scope>repository</scope>
+    <condition>PowerShell scripts without bash parity</condition>
+    <metadata>
+      <source>bin/specfarm.ps1</source>
+      <note>Constitution I (PowerShell Entrypoint Allowance)</note>
+    </metadata>
+  </rule>
+  <rule id="r_alias_001" enabled="true" severity="enforce" vibe="farm" phase="3b">
+    <name>Alias Consistency Sync</name>
+    <description>Keep scripts/aliases.sh and .github/copilot-aliases.json in sync</description>
+    <scope>repository</scope>
+    <condition>Out-of-sync aliases</condition>
+    <metadata>
+      <source>scripts/aliases.sh</source>
+      <note>Constitution III.B</note>
+    </metadata>
+  </rule>
+</rules>

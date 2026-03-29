@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture: 5 basic rules for Phase 3b cross-platform parity testing -->
+<rules xmlns="http://specfarm.example.org/rules" version="1.0">
+
+  <!-- Rule 1: Prefer bash over sh -->
+  <rule id="test-prefer-bash" enabled="true" severity="warn" vibe="plain" phase="3b" category="shell">
+    <name>Prefer Bash Shell</name>
+    <description>Test rule: scripts should declare bash (not sh) as interpreter.</description>
+    <scope>src/</scope>
+    <condition>
+      <exists path="src/" pattern="*.sh"/>
+    </condition>
+  </rule>
+
+  <!-- Rule 2: Require .specfarm directory -->
+  <rule id="test-specfarm-dir-exists" enabled="true" severity="enforce" vibe="farm" phase="3b" category="structure">
+    <name>SpecFarm Directory Present</name>
+    <description>Test rule: .specfarm/ directory must exist in the repo root.</description>
+    <scope>global</scope>
+    <condition>
+      <exists path=".specfarm/"/>
+    </condition>
+  </rule>
+
+  <!-- Rule 3: Require rules.xml -->
+  <rule id="test-rules-xml-exists" enabled="true" severity="enforce" vibe="strict-engineer" phase="3b" category="structure">
+    <name>Rules XML Present</name>
+    <description>Test rule: .specfarm/rules.xml must be present for drift enforcement.</description>
+    <scope>global</scope>
+    <condition>
+      <exists path=".specfarm/rules.xml"/>
+    </condition>
+  </rule>
+
+  <!-- Rule 4: No hardcoded /storage/emulated paths (Termux-specific anti-pattern) -->
+  <rule id="test-no-termux-hardcoded-paths" enabled="true" severity="warn" vibe="plain" phase="3b" category="crossplatform">
+    <name>No Hardcoded Termux Paths</name>
+    <description>Test rule: source files must not hardcode /storage/emulated/0 (Termux-specific paths).</description>
+    <scope>src/</scope>
+    <condition>
+      <exists path="src/" pattern="*.sh"/>
+    </condition>
+  </rule>
+
+  <!-- Rule 5: Crossplatform platform-check module present -->
+  <rule id="test-platform-check-exists" enabled="true" severity="suggest" vibe="farm" phase="3b" category="crossplatform">
+    <name>Platform Check Module Present</name>
+    <description>Test rule: src/crossplatform/platform-check.sh must exist for OS detection support.</description>
+    <scope>src/crossplatform/</scope>
+    <condition>
+      <exists path="src/crossplatform/platform-check.sh"/>
+    </condition>
+  </rule>
+
+</rules>

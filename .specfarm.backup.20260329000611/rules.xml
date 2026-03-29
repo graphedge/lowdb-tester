@@ -1,0 +1,419 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rules xmlns="http://specfarm.example.org/rules" version="1.0">
+  <!-- Rule: Environment Declaration -->
+  <rule id="project-environment-context" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="environment" doc="http://specfarm.example.org/docs/rules/environment-context">
+    <name>Project Environment Context</name>
+    <description>The primary development environment is Termux on Android; the primary agent is Gemini CLI. However, the system MUST support multi-context logging from other environments (e.g., CI, local desktop).</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">\.specfarm/phase</signature>
+    </condition>
+  </rule>
+
+  <!-- Rule: Command Execution Environment -->
+  <rule id="shell-prefer-posix" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="environment" doc="http://specfarm.example.org/docs/rules/shell-prefer-posix">
+    <name>Prefer POSIX Shells</name>
+    <description>AI agents MUST prefer POSIX-compliant shells (bash/zsh/sh) for command execution. Avoid platform-specific shells like PowerShell unless strictly required.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">bash|zsh|sh</signature>
+    </condition>
+  </rule>
+
+  <!-- Rule: Command Efficiency & Output -->
+  <rule id="shell-prefer-quiet-flags" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="efficiency" doc="http://specfarm.example.org/docs/rules/shell-prefer-quiet-flags">
+    <name>Prefer Quiet Flags</name>
+    <description>Always use quiet or silent flags (e.g., --silent, --quiet, --no-pager) to minimize output while capturing necessary data.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">--silent|--quiet|--no-pager</signature>
+    </condition>
+  </rule>
+  <rule id="shell-disable-pagination" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="efficiency" doc="http://specfarm.example.org/docs/rules/shell-disable-pagination">
+    <name>Disable Pagination</name>
+    <description>Explicitly disable terminal pagination (e.g., PAGER=cat or --no-pager) to ensure commands terminate and output is fully captured.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">--no-pager|PAGER=cat</signature>
+    </condition>
+  </rule>
+
+  <!-- Rule: Error Handling & Reporting -->
+  <rule id="shell-capture-all-output" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="error-handling" doc="http://specfarm.example.org/docs/rules/shell-capture-all-output">
+    <name>Capture All Output</name>
+    <description>AI agents MUST capture both stdout and stderr for all shell executions to ensure complete visibility into command outcomes.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">stdout|stderr</signature>
+    </condition>
+  </rule>
+  <rule id="shell-exit-code-validation" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="error-handling" doc="http://specfarm.org/docs/rules/shell-exit-code-validation">
+    <name>Exit Code Validation</name>
+    <description>Every shell command execution MUST be followed by an exit code check (non-zero indicates failure).</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">exit_code|\$?</signature>
+    </condition>
+  </rule>
+
+  <!-- Rule: Security -->
+  <rule id="shell-security-scrub-secrets" enabled="true" severity="block" vibe="strict-engineer" phase="2" category="security" doc="http://specfarm.org/docs/rules/shell-security-scrub-secrets">
+    <name>Scrub Secrets</name>
+    <description>AI agents MUST NOT log, print, or commit secrets, API keys, or sensitive credentials. All logged shell data MUST be sanitized.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">SECRET|API_KEY|PASSWORD|TOKEN</signature>
+    </condition>
+  </rule>
+
+  <!-- Rule: Multi-Context Metadata -->
+  <rule id="log-schema-uniformity" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="logging" doc="http://specfarm.org/docs/rules/log-schema-uniformity">
+    <name>Uniform Log Schema</name>
+    <description>All agents, regardless of context, MUST use a uniform JSON schema for shell-errors.log. Required fields: timestamp, agent_type, agent_session_id, command, exit_code, stderr, stdout, cwd, os_info, shell_info, context.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">agent_type|agent_session_id|os_info</signature>
+    </condition>
+  </rule>
+  <rule id="runtime-context-attribution" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="logging" doc="http://specfarm.org/docs/rules/runtime-context-attribution">
+    <name>Runtime Context Attribution</name>
+    <description>Log entries MUST prioritize explicit runtime metadata (e.g., agent_type='gemini-cli', os_info='Android/Termux') to enable filtering and context-specific rule generation.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">os_info|agent_type|shell_info</signature>
+    </condition>
+  </rule>
+
+  <!-- Rule: Real-Time Shell Error Logging -->
+  <rule id="agent-realtime-error-logging" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="logging" doc="http://specfarm.org/docs/rules/agent-realtime-error-logging">
+    <name>Real-Time Error Logging</name>
+    <description>AI agents MUST immediately log any shell command failure (non-zero exit code) to .specfarm/shell-errors.log using atomic appends to prevent log corruption in multi-agent sessions.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">shell-errors\.log</signature>
+    </condition>
+  </rule>
+
+  <!-- Rule: Error-to-Rule Conversion (Context-Aware) -->
+  <rule id="pre-commit-error-learning" enabled="true" severity="enforce" vibe="friendly-farmer" phase="2" category="learning" doc="http://specfarm.org/docs/rules/pre-commit-error-learning">
+    <name>Context-Aware Error Learning</name>
+    <description>During pre-commit, the system MUST analyze .specfarm/shell-errors.log and convert frequent error patterns into new drift rules. This ensures that a Termux-specific failure does not result in a rule that erroneously blocks a Windows/CI environment.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">process-shell-errors</signature>
+    </condition>
+  </rule>
+
+  <!-- Rule: Git Integration -->
+  <rule id="git-pre-commit-drift-gate" enabled="true" severity="block" vibe="friendly-farmer" phase="2" category="git" doc="http://specfarm.org/docs/rules/git-pre-commit-drift-gate">
+    <name>Pre-Commit Drift Gate</name>
+    <description>A pre-commit hook MUST execute drift checks, process shell error logs, update rules.xml, and block commits if unjustified drift is detected.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">specfarm drift</signature>
+    </condition>
+  </rule>
+
+  <!-- Rule: Tool Preferences -->
+  <rule id="shell-prefer-standard-utils" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="tooling" doc="http://specfarm.org/docs/rules/shell-prefer-standard-utils">
+    <name>Prefer Standard Utilities</name>
+    <description>Prefer standard Unix utilities (grep, awk, sed, find) over custom scripts or heavy external dependencies in early phases.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">grep|awk|sed</signature>
+    </condition>
+  </rule>
+
+  <!-- Rule: Interactivity -->
+  <rule id="shell-prefer-non-interactive" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="interactivity" doc="http://specfarm.org/docs/rules/shell-prefer-non-interactive">
+    <name>Prefer Non-Interactive Commands</name>
+    <description>Prefer non-interactive commands. Use flags like --yes, --force, or -y to bypass interactive prompts.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">--yes|-y|--force</signature>
+    </condition>
+  </rule>
+  <rule id="shell-error-avoid-03ac3520" enabled="false" severity="suggest" vibe="farm" phase="2" category="error-handling" doc="http://specfarm.org/docs/rules/shell-error-avoid-03ac3520">
+    <name>Avoid Repeated 'ls /*' Failure</name>
+    <description>Avoid repeated failure of 'ls /*'. Last error (OS: Linux 6.1.145-android14-11-gc1de4747ac59-ab14219743 (aarch64), Agent: gemini-cli): ls: /non-existent: No such file or directory</description>
+    <scope>directory:bin</scope>
+    <condition>
+      <signature type="regex">ls\ /\*</signature>
+    </condition>
+  </rule>
+
+  <rule id="shell-error-path-resolution-wsl" enabled="true" severity="warn" vibe="friendly-farmer" phase="3b" category="cross-platform" doc="http://specfarm.org/docs/rules/shell-error-path-resolution-wsl">
+    <name>WSL Path Resolution: Backslash vs Forward Slash</name>
+    <description>WSL file tools may fail when passed paths with backslashes (\\wsl.localhost\Ubuntu\...) from Windows context. Error: "Invalid input path" when calling tools like create_file with UNC paths. Solution: normalize UNC paths to Unix format (/home/brett/...) before passing to POSIX tools. Agent: GitHub Copilot, Session: 2026-03-15, Context: paratasks.md file creation.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">\\\\wsl\.localhost|Invalid input path</signature>
+    </condition>
+  </rule>
+
+  <rule id="shell-error-terminal-interrupt" enabled="true" severity="suggest" vibe="farm" phase="3b" category="error-handling" doc="http://specfarm.org/docs/rules/shell-error-terminal-interrupt">
+    <name>Terminal Interrupt (Ctrl+C) in find Command</name>
+    <description>find command interrupted with Ctrl+C. Error: "^C" in output. Root cause: find was searching a large directory tree (/home/brett/projects/specfarm with 5000+ files). Solution: Add maxdepth limit or timeout to find commands. Agent: GitHub Copilot, Session: 2026-03-15.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">find.*--name|command interrupted</signature>
+    </condition>
+  </rule>
+
+  <!-- Phase 2: Directory and File Structure Rules -->
+  <rule id="phase2-executables-in-bin" enabled="true" severity="enforce" vibe="factory" phase="2" folder="bin" category="structure" doc="http://specfarm.org/docs/rules/phase2-executables-in-bin">
+    <name>Executables in bin/</name>
+    <description>All executable scripts (.sh, .ps1) MUST reside in bin/. Executables must have executable permissions set.</description>
+    <scope>directory:bin</scope>
+    <condition>
+      <pattern type="glob">bin/(.*)\.(sh|ps1)</pattern>
+    </condition>
+  </rule>
+  
+  <rule id="phase2-logic-in-src" enabled="true" severity="enforce" vibe="factory" phase="2" folder="src" category="structure" doc="http://specfarm.org/docs/rules/phase2-logic-in-src">
+    <name>Logic in src/</name>
+    <description>Core logic modules MUST reside in src/ directory. Entry points and CLI dispatchers belong in bin/ only. Prevents mixing of concerns.</description>
+    <scope>directory:src</scope>
+    <condition>
+      <pattern type="glob">src/.*(\.(sh|ps1))</pattern>
+    </condition>
+  </rule>
+
+  <!-- Phase 2: XML Validation and Rules Integrity -->
+  <rule id="phase2-xml-validation-required" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" global="true" category="xml" doc="http://specfarm.org/docs/rules/phase2-xml-validation-required">
+    <name>XML Validation Required</name>
+    <description>rules.xml MUST validate against rules-schema.xsd on every export and pre-commit. Enforces master rules.xml integrity as single source of truth.</description>
+    <scope>file:*.xml</scope>
+    <condition>
+      <signature type="regex">rules\.xml</signature>
+    </condition>
+    <action type="enforce"/>
+  </rule>
+
+  <!-- Phase 2: Dependency Whitelist Rule -->
+  <rule id="phase2-dep-whitelist" enabled="true" severity="warn" vibe="friendly-farmer" phase="2" global="true" category="dependencies" doc="http://specfarm.org/docs/rules/phase2-dep-whitelist">
+    <name>Dependency Whitelist</name>
+    <description>Only approved stack items for Phase 2 are allowed: bash, powershell, xml, markdown, git, speckit. External dependencies require explicit approval. Warns on new imports; does NOT block commits.</description>
+    <scope>global</scope>
+    <condition>
+      <pattern type="glob">import|require|use|include</pattern>
+    </condition>
+    <action type="notify"/>
+  </rule>
+
+  <!-- Phase 2: Test Alignment Rules -->
+  <rule id="phase2-tests-reference-rules" enabled="true" severity="warn" vibe="friendly-farmer" phase="2" folder="tests" category="testing" doc="http://specfarm.org/docs/rules/phase2-tests-reference-rules">
+    <name>Tests Reference rules.xml</name>
+    <description>Tests MUST reference rules.xml as the master configuration source. Deprecated: direct constitution.md references. Keeps test suites aligned with actual rule enforcement.</description>
+    <scope>directory:tests</scope>
+    <condition>
+      <signature type="regex">rules\.xml</signature>
+    </condition>
+    <action type="notify"/>
+  </rule>
+
+  <!-- Phase 2: Phase Tagging Enforcement -->
+  <rule id="phase2-rule-phase-tag-required" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" global="true" category="rules" doc="http://specfarm.org/docs/rules/phase2-rule-phase-tag-required">
+    <name>Rule Phase Tag Required</name>
+    <description>All new rules MUST include a phase attribute (current phase = 2). Legacy rules may be backfilled via manual triage. Enables scoped audits and phase-based rule filtering.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">phase=</signature>
+    </condition>
+    <action type="enforce"/>
+  </rule>
+
+  <!-- Phase 2: Vibe/Personality Rules (Suggestion-only) -->
+  <rule id="phase2-vibe-consistency" enabled="true" severity="suggest" vibe="farm" phase="2" global="true" category="vibe" doc="http://specfarm.org/docs/rules/phase2-vibe-consistency">
+    <name>Vibe Consistency</name>
+    <description>Rules tagged as interactive (type='warn', type='suggest') SHOULD include a vibe attribute (farm|jungle|plain) for personality consistency. Non-blocking during Phase 2; Phase 3 will enforce.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">vibe=</signature>
+    </condition>
+    <action type="notify"/>
+  </rule>
+
+  <!-- Phase 2: Pre-Commit Enforcement -->
+  <rule id="phase2-pre-commit-drift-blocks" enabled="true" severity="block" vibe="friendly-farmer" phase="2" global="true" category="git" doc="http://specfarm.org/docs/rules/phase2-pre-commit-drift-blocks">
+    <name>Pre-Commit Drift Blocks</name>
+    <description>Pre-commit hook runs specfarm drift checks and blocks unjustified commits in strict mode. Warnings only in loose mode (default Phase 2).</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="regex">specfarm-pre-commit|drift</signature>
+    </condition>
+    <action type="fail-build"/>
+  </rule>
+
+  <!-- Phase 3: Module & Function Integrity Rules (Deletion Prevention) -->
+  <rule id="phase3-src-module-non-empty" enabled="true" severity="block" vibe="strict-engineer" phase="3" category="integrity" doc="http://specfarm.org/docs/rules/phase3-src-module-non-empty">
+    <name>Source Modules Must Be Non-Empty</name>
+    <description>All .sh files in src/ MUST be >= 50 lines. Prevents accidental truncation or removal of core logic during refactors. Exception: config stubs, templates, and explicitly marked stub files can be &lt; 50 lines if documented with a "stub" marker comment.</description>
+    <scope>directory:src</scope>
+    <condition>
+      <signature type="file">src/**/*.sh</signature>
+      <require>line-count >= 50 OR contains-marker:stub-file</require>
+    </condition>
+  </rule>
+
+  <rule id="phase3-exported-functions-declared" enabled="true" severity="block" vibe="strict-engineer" phase="3" category="integrity" doc="http://specfarm.org/docs/rules/phase3-exported-functions-declared">
+    <name>Exported Functions Must Exist</name>
+    <description>All functions declared/called in bin/ entry points (e.g., run_drift_check, dispatch_nudge, export_markdown) MUST exist in their sourced src/ modules. Validated by tests/e2e/test_function_exports.sh during pre-commit.</description>
+    <scope>global</scope>
+    <condition>
+      <signature type="function-export">run_drift_check|dispatch_nudge|export_markdown|export_rules</signature>
+      <require>function-exists-in-sourced-module</require>
+    </condition>
+  </rule>
+
+  <rule id="phase3-import-validation" enabled="true" severity="block" vibe="strict-engineer" phase="3" category="integrity" doc="http://specfarm.org/docs/rules/phase3-import-validation">
+    <name>Import Validation in Entry Points</name>
+    <description>All bin/ and src/ entry points that source modules MUST validate sourced modules before use. Post-source validation pattern: if ! declare -f func_name; then exit 1; fi. Prevents silent import failures.</description>
+    <scope>directory:bin</scope>
+    <condition>
+      <pattern type="regex">source\s+\$\{?BASE_DIR\}?/src/.*\.sh</pattern>
+      <require>post-source-validation-present</require>
+    </condition>
+  </rule>
+
+  <rule id="phase3-test-module-completeness" enabled="true" severity="warn" vibe="friendly-farmer" phase="3" category="testing" doc="http://specfarm.org/docs/rules/phase3-test-module-completeness">
+    <name>Test Coverage for Source Modules</name>
+    <description>Each src/ module MUST have at least one test that validates: (1) file is sourced without errors, (2) all exported functions are present (declare -f check), (3) basic function behavior tested. Improves coverage beyond mere file existence checks.</description>
+    <scope>directory:tests</scope>
+    <condition>
+      <signature type="test-coverage">tests/unit/test_module_*|tests/e2e/test_function_exports</signature>
+      <require>function-existence-check</require>
+    </condition>
+  </rule>
+
+  <rule id="phase3-partial-refactor-guard" enabled="true" severity="block" vibe="strict-engineer" phase="3" category="git" doc="http://specfarm.org/docs/rules/phase3-partial-refactor-guard">
+    <name>No Partial Refactors in Pre-Commit</name>
+    <description>Pre-commit hook MUST prevent commits with incomplete refactors: functions removed but files kept, modules created but not imported, or import statements without target functions. Validates call sites match definitions using: grep -l "function_name" src/*.sh bin/*.sh</description>
+    <scope>global</scope>
+    <condition>
+      <pattern type="refactor-boundary">moved-function|orphaned-import|undefined-function-call</pattern>
+      <require>refactor-is-complete</require>
+    </condition>
+  </rule>
+
+    <!-- Phase 3b: Cross-Platform Parity Rules -->
+
+    <rule id="phase3b-parity-spec-defined" enabled="true" severity="warn" vibe="friendly-farmer" phase="3b" category="testing" doc="http://specfarm.org/docs/rules/phase3b-parity-spec-defined">
+      <name>Parity Specification Must Exist</name>
+      <description>The orchestrated testing parity specification MUST be present at tests/crossplatform/PARITY-SPEC.md. Documents what "identical output" means across bash and PowerShell for each feature category.</description>
+      <scope>directory:tests</scope>
+      <condition>
+        <exists>tests/crossplatform/PARITY-SPEC.md</exists>
+      </condition>
+      <action type="notify"/>
+    </rule>
+
+    <rule id="phase3b-acceptable-diffs-documented" enabled="true" severity="warn" vibe="friendly-farmer" phase="3b" category="testing" doc="http://specfarm.org/docs/rules/phase3b-acceptable-diffs-documented">
+      <name>Acceptable Differences Must Be Documented</name>
+      <description>tests/crossplatform/acceptable-diffs.md MUST exist and enumerate all known platform-specific output differences (CRLF/LF, path separators, ANSI codes, timestamps) with their normalization rules.</description>
+      <scope>directory:tests</scope>
+      <condition>
+        <exists>tests/crossplatform/acceptable-diffs.md</exists>
+      </condition>
+      <action type="notify"/>
+    </rule>
+
+    <rule id="phase3b-parity-validator-exists" enabled="false" severity="enforce" vibe="strict-engineer" phase="3b" category="testing" doc="http://specfarm.org/docs/rules/phase3b-parity-validator-exists">
+      <name>Parity Validator Script Must Exist</name>
+      <description>tests/crossplatform/parity-validator.sh MUST exist and implement the normalization pipeline (strip ANSI, normalize paths, normalize line endings, replace timestamps). Enable after T011a is complete.</description>
+      <scope>directory:tests</scope>
+      <condition>
+        <exists>tests/crossplatform/parity-validator.sh</exists>
+      </condition>
+      <action type="fail-build"/>
+    </rule>
+
+    <rule id="phase3b-test-runner-dual-exists" enabled="false" severity="enforce" vibe="strict-engineer" phase="3b" category="testing" doc="http://specfarm.org/docs/rules/phase3b-test-runner-dual-exists">
+      <name>Dual Test Runner Must Exist</name>
+      <description>tests/crossplatform/test-runner-dual.sh MUST exist and run identical test scenarios on bash and PowerShell environments, comparing normalized outputs for parity. Enable after T011b is complete.</description>
+      <scope>directory:tests</scope>
+      <condition>
+        <exists>tests/crossplatform/test-runner-dual.sh</exists>
+      </condition>
+      <action type="fail-build"/>
+    </rule>
+
+    <rule id="phase3b-platform-abstraction" enabled="false" severity="block" vibe="strict-engineer" phase="3b" category="integrity" doc="http://specfarm.org/docs/rules/phase3b-platform-abstraction">
+      <name>Cross-Platform Abstraction Layer Must Exist</name>
+      <description>src/crossplatform/platform-check.sh MUST exist for OS detection (Linux/macOS/Windows) and PowerShell version checking. Required before any platform-conditional logic in bin/. Enable after T005–T007 complete.</description>
+      <scope>directory:src</scope>
+      <condition>
+        <exists>src/crossplatform/platform-check.sh</exists>
+      </condition>
+      <action type="fail-build"/>
+    </rule>
+
+    <rule id="phase3b-powershell-wrapper" enabled="false" severity="block" vibe="strict-engineer" phase="3b" category="integrity" doc="http://specfarm.org/docs/rules/phase3b-powershell-wrapper">
+      <name>PowerShell Wrapper Scripts Must Exist</name>
+      <description>bin/drift-engine.ps1 MUST exist as a PowerShell-native wrapper that delegates to bash core or provides PS-native parity logic. Required for Windows enterprise adoption. Enable after T009–T010 complete and Windows CI is green.</description>
+      <scope>directory:bin</scope>
+      <condition>
+        <exists>bin/drift-engine.ps1</exists>
+      </condition>
+      <action type="fail-build"/>
+    </rule>
+
+
+  <!-- LOST RULES - discovered via rule coverage audit (Phase 0b) -->
+
+  <!-- Rule: Zero-Dependency Testing (Constitution II.A) -->
+  <rule id="r_constitution_zero_depend_001" enabled="true" severity="enforce" vibe="strict-engineer" phase="all" category="testing" doc="http://specfarm.example.org/docs/rules/zero-dependency-testing">
+    <name>Zero-Dependency Testing</name>
+    <description>All tests MUST be plain bash with no external test frameworks (no pytest/BATS/Jest). Constitutional requirement II.A: zero dependencies beyond bash, grep, sed, awk, git.</description>
+    <scope>tests</scope>
+    <condition>
+      <signature type="regex">pytest|BATS|Jest|mocha|@test</signature>
+    </condition>
+    <action type="fail-build"/>
+  </rule>
+
+  <!-- Rule: Task-Context Mode (Gather-Rules Agent Feature) -->
+  <rule id="r_task_context_mode_001" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="agent-feature" doc="http://specfarm.example.org/docs/rules/task-context-mode">
+    <name>Task-Context Mode Flag Parsing</name>
+    <description>Task-context mode must parse --task-context flags correctly and generate context-aware rule suggestions from task description, keywords, git history, and constitution references.</description>
+    <scope>bin:gather-rules-agent.sh</scope>
+    <condition>
+      <signature type="regex">--task-context|task.context|context.aware</signature>
+    </condition>
+    <action type="enforce"/>
+  </rule>
+
+  <!-- Rule: Confidence Scoring Algorithm (Gather-Rules Agent Feature) -->
+  <rule id="r_confidence_scoring_001" enabled="true" severity="enforce" vibe="strict-engineer" phase="2" category="agent-feature" doc="http://specfarm.example.org/docs/rules/confidence-scoring">
+    <name>Confidence Scoring Algorithm</name>
+    <description>Confidence scores must be calculated from weighted components: git history (20%), test links (25%), constitution references (25%), keyword density (30%). Total confidence range 0-100.</description>
+    <scope>bin:gather-rules-agent.sh</scope>
+    <condition>
+      <signature type="regex">calculate_confidence|confidence.score|confidence.*=</signature>
+    </condition>
+    <action type="enforce"/>
+  </rule>
+
+  <!-- Rule: Line Endings Normalization (Phase 3b Cross-Platform) -->
+  <rule id="r_line_endings_norm_001" enabled="true" severity="enforce" vibe="strict-engineer" phase="3b" category="cross-platform" doc="http://specfarm.example.org/docs/rules/line-endings">
+    <name>Line Ending Normalization</name>
+    <description>Line endings must be normalized (CRLF ↔ LF) for cross-platform compatibility in .specfarm/ files (rules.xml, justifications.log, shell-errors.log). Use .specfarm/src/crossplatform/line-endings.sh.</description>
+    <scope>file:.specfarm/rules.xml,file:.specfarm/justifications.log,file:.specfarm/shell-errors.log</scope>
+    <condition>
+      <signature type="regex">CRLF|line.ending|line.normali</signature>
+    </condition>
+    <action type="enforce"/>
+  </rule>
+
+  <!-- Rule: Path Normalization (Phase 3b Cross-Platform) -->
+  <rule id="r_path_normalize_001" enabled="true" severity="enforce" vibe="strict-engineer" phase="3b" category="cross-platform" doc="http://specfarm.example.org/docs/rules/path-normalization">
+    <name>Path Normalization</name>
+    <description>Paths must be normalized between Windows (\) and Unix (/) formats via .specfarm/src/crossplatform/path-normalize.sh. Enable on Windows CI runner (test matrix: windows-latest, PowerShell 5.1 + 7.x).</description>
+    <scope>scripts:bin,src:crossplatform</scope>
+    <condition>
+      <signature type="regex">path.normal|normalize.path|/c/|C:\\|backslash</signature>
+    </condition>
+    <action type="enforce"/>
+  </rule>
+
+</rules>

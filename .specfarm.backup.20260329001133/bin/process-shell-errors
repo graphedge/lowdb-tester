@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+import sys
+import os
+import json
+import hashlib
+import re
+
+def generate_rule_id(command):
+    # Simple hash-based ID
+    h = hashlib.sha256(command.encode()).hexdigest()[:8]
+    return f"shell-error-avoid-{h}"
+
+def normalize_command(command):
+    # Very basic normalization: replace common path patterns
+    cmd = re.sub(r'/[a-zA-Z0-9\._\-/]+', '/*', command)
+    return cmd
+
+def main():
+    log_file = ".specfarm/shell-errors.log"
+    rules_file = ".specfarm/rules.xml"
+
+    if not os.path.exists(log_file):
+        print("No shell error log found.")
+        return
+
+    errors = []
+    with open(log_file, "r") as f:
+        for line in f:
+            if line.strip():
+                try:
+                    errors.append(json.loads(line))
+                except:
+                    continue
+
+    if not errors:
+        print("No valid errors to process.")
+        return
+
+    # Group by normalized command
+    groups = {}
+    for err in errors:
+        norm = normalize_command(err["command"])
+        if norm not in groups:
+            groups[norm] = []
+        groups[norm].append(err)
+
+    new_rules = []
+    for norm, instances in groups.items():
+        if len(instances) >= 2:
+            # Generate rule
+            rule_id = generate_rule_id(norm)
+            
+            # Check if rule already exists in rules.xml
+            already_exists = False
+            if os.path.exists(rules_file):
+                with open(rules_file, "r") as rf:
+                    if rule_id in rf.read():
+                        already_exists = True
+            
+            if not already_exists:
+                # Use the latest instance for description context
+                last = instances[-1]
+                desc = f"Avoid repeated failure of '{norm}'. Last error (OS: {last['os_info']}, Agent: {last['agent_type']}): {last['stderr']}"
+                # Use double-escaped \n if needed, or just \n
+                rule = f'  <rule id="{rule_id}" description="{desc}" immutable="false" available-from="2.0" enforced-from="2.0"><signature type="regex">{re.escape(norm)}</signature></rule>'
+                new_rules.append(rule)
+
+    if new_rules:
+        # Append to rules.xml before the closing tag
+        if os.path.exists(rules_file):
+            with open(rules_file, "r") as f:
+                content = f.read()
+            
+            if "</specfarm-rules>" in content:
+                # Join with actual newlines
+                rules_to_add = "\n".join(new_rules)
+                updated_content = content.replace("</specfarm-rules>", rules_to_add + "\n</specfarm-rules>")
+                with open(rules_file, "w") as f:
+                    f.write(updated_content)
+                print(f"Added {len(new_rules)} new rules to {rules_file}")
+            else:
+                print("Error: Could not find closing tag in rules.xml")
+        else:
+            print("Error: rules.xml missing")
+
+    # Archive the log
+    bak_file = log_file + ".bak"
+    if os.path.exists(log_file):
+        with open(log_file, "r") as f:
+            log_content = f.read()
+        with open(bak_file, "a") as f:
+            f.write(log_content)
+        # Clear current log
+        with open(log_file, "w") as f:
+            pass
+        print(f"Archived errors to {bak_file}")
+
+if __name__ == "__main__":
+    main()
